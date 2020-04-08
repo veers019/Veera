@@ -1,0 +1,627 @@
+1)java installation:
+------------------------
+
+sudo su -
+
+yum remove java-1.7.0*
+
+yum install java-1.8*
+
+find /usr/lib/jvm/java-1.8* | head -n 3
+
+/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.242.b08-0.50.amzn1.x86_64
+
+
+vi  .bash_profile
+
+JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.242.b08-0.50.amzn1.x86_64
+PATH=$PATH:$HOME/bin:$JAVA_HOME
+
+
+2)jenkins installation
+----------------------------
+                   
+https://pkg.jenkins.io/redhat-stable/
+
+sudo wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
+sudo rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io.key
+yum install jenkins
+service jenkins status
+service jenkins start
+
+15.206.88.9:8080/
+cat /var/lib/jenkins/secrets/initialAdminPassword
+
+Global tool configuration -> add jdk - > JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.242.b08-0.50.amzn1.x86_64
+
+
+/var/lib/jenkins/workspace
+
+3)GIT installation
+-----------------------
+yum install git
+
+install Github plugin in jenkins.
+Global tool configuration -> GIT -> it will take automatically.
+
+Github account - veers019/March - https://github.com/veers019/hello-world.git
+
+
+git config --global user.name veers019
+git config --global user.email veera.boss93@gmail.com
+
+echo "# Veera" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git remote add origin https://github.com/veers019/Veera.git
+git push -u origin master
+                
+
+4)Maven Installation:
+---------------------------
+
+
+cd /opt
+# downloading maven version 3.6.3
+
+https://maven.apache.org/download.cgi
+
+wget https://mirrors.estointernet.in/apache/maven/maven-3/3.6.3/binaries/apache-maven-3.6.3-bin.tar.gz
+tar -xvzf apache-maven-3.6.3-bin.tar.gz
+mv apache-maven-3.6.3 maven
+
+vi ~/.bash_profile
+
+JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.242.b08-0.50.amzn1.x86_64
+M2_HOME=/opt/maven
+M2=/opt/maven/bin
+PATH=$PATH:$HOME/bin:$JAVA_HOME:$M2_HOME:$M2
+
+
+mvn --version
+
+Manage Jenkins > Jenkins Plugins > available > Maven Invoker
+Manage Jenkins > Jenkins Plugins > available > Maven Integration
+
+Manage Jenkins > Global Tool Configuration > Maven
+
+M2_HOME
+/opt/maven
+
+
+Gradle Installation:
+---------------------------
+
+cd /opt
+wget -N https://services.gradle.org/distributions/gradle-6.3-all.zip
+unzip *.zip
+ln -s /opt/gradle-6.3 /opt/gradle
+
+
+chown -R ec2-user:ec2-user $/opt/gradle
+
+sudo vi /etc/profile.d/gradle.sh
+export GRADLE_HOME=/opt/gradle
+export PATH=$PATH:$GRADLE_HOME/bin
+. /etc/profile.d/gradle.sh
+# check installation
+gradle -v
+
+
+install Gradle plugin in jenkins.
+global tool config- > GRADLE_HOME
+free style job- git(scm) -> build->invoke gradle-> chosse grale name and task - clean test
+
+
+
+5)Tomcat Installation:
+-----------------------------
+
+cd /opt
+
+wget https://downloads.apache.org/tomcat/tomcat-8/v8.5.53/bin/apache-tomcat-8.5.53.tar.gz
+tar -xvzf  apache-tomcat-8.5.53.tar.gz
+
+mv apache-tomcat-8.5.53 tomcat
+
+cd tomcat/bin
+
+ln -s /opt/tomcat/bin/startup.sh /usr/local/bin/tomcatup
+ln -s /opt/tomcat/bin/shutdown.sh /usr/local/bin/tomcatdown
+
+cd /opt/apache-tomcat-8.5.35/conf - port change
+
+vi /opt/tomcat/conf/tomcat-users.xml - user add
+
+<role rolename="manager-gui"/>
+<role rolename="manager-script"/>
+<role rolename="manager-jmx"/>
+<role rolename="manager-status"/>
+<user username="admin" password="admin" roles="manager-gui, manager-script, manager-jmx, manager-status"/>
+<user username="deployer" password="deployer" roles="manager-script"/>
+<user username="tomcat" password="s3cret" roles="manager-gui"/>
+
+
+Deploy to container plugin install.
+
+
+Deploy war file to Tomcat:
+------------------------------------
+
+java-git-jenkins-maven are in place.
+
+install tomcat in other ec2 instance.
+
+Install ssh agent in jenkins.
+
+add global creds in jenkins for tomcat.
+kind:ssh username with private key
+username:ec2-user
+private key:copy/paste pem file
+id:tomcat-dev
+decsription:tomcat-dev
+
+
+node {
+     stage('SCM checkout'){
+        git credentialsId: 'git-creds', url: 'https://github.com/veers019/my-app.git'
+        
+     }
+     stage('maven package'){
+        def mvnHome = tool name: 'maven', type: 'maven'
+        sh "${mvnHome}/bin/mvn package"
+     }
+     
+     stage('Deploy to Tomcat'){
+        sshagent(['tomcat-dev']){
+           sh 'scp -o StrictHostKeyChecking=no  target/*.war ec2-user@3.7.45.251:/opt/tomcat/webapps '
+        }
+      
+      }
+
+
+
+6)Docker Installation:
+-----------------------------
+
+Docker hub account - veers019/Veera@123 - docker push veers019/veera:tagname
+
+yum update -y
+
+yum install docker -y
+docker --version 
+
+# start docker services
+service docker start
+service docker status
+
+
+docker pull tomcat
+docker run -d --name test-tomcat-server -p 8080:8080 tomcat:latest
+docker exec -it test-tomcat-server /bin/bash
+
+cd webapps ls -lrt (total 0)
+
+cd webapps.dist (if any issue- webapps directory is empty, then copy it from webapps.dist)
+cp -R * ../webapps
+
+
+
+FROM jboss/wildfly 
+ADD helloworld.war /opt/jboss/wildfly/standalone/deployments/
+docker build --tag=wildfly-helloworld .
+docker images 
+docker run -it wildfly-helloworld
+docker inspect -f '{{ .NetworkSettings.IPAddress }}' b63e7345bf81
+
+
+Integrating with jenkins:
+--------------------------------
+
+1)publish over ssh plugin
+
+2)add user
+useradd dockeradmin
+passwd dockeradmin - set pwd - Veera@123
+
+cat /etc/group
+usermod -aG docker dockeradmin
+
+id dockeradmin
+
+ip addr
+
+3)Enable password based authentication
+
+vi /etc/ssh/sshd_config
+
+PasswordAuthentication yes
+
+service sshd reload
+
+4)configur system - publish over ssh
+
+add ssh server
+
+name:dockerhost
+host:ip adress
+username -dockeradmin
+ pwd a Veera@123 
+
+test connection
+
+
+5)create a new job and choose send build artifacts over ssh in post build actions.
+
+dockerhost will populate automatically.
+
+webapp/target*.war
+
+
+[dockeradmin@docker ~]$ pwd
+/home/dockeradmin
+
+
+7)Sonarqube Installation(mithun technologies):
+========================================
+
+Install java-1.8*
+
+medium instance- need 3 GB memory.
+
+free -h
+
+$ cd /opt
+$ wget https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-7.6.zip
+$  unzip sonarqube-7.6.zip 
+$ useradd sonar
+visudo
+sonar   ALL=(ALL)      NOPASSWD: ALL
+
+chown -R sonar:sonar /opt/sonarqube-7.6
+chmod -R 775 /opt/sonarqube-7.6
+
+su - sonar
+
+cd /opt/sonarqube-7.6/bin/linux-x86-64
+./sonar.sh start
+
+enable all TCP in inbound rules(9000).
+
+http://13.126.192.145:9000/
+
+username and pwd- admin
+
+
+Install sonarqube scanner plugins.
+
+configure system: name:sonarqube server  url:http://13.126.192.145:9000/
+
+creds->add creds(jenkins)->secret text
+
+sonarqube login->administrator->security-generate token->token name:jenkins
+
+eab16f1f72ad29039b22dd38cb3e885d073a7f9d
+
+
+ANALYSIS SUCCESSFUL, you can browse http://13.126.192.145:9000/dashboard?id=in.javahome%3Amyweb
+
+
+
+8)Slack instalation and integration:
+================================
+
+Install slack notification plugin.
+
+in slack url -> add an app -> incoming webhooks -> add channel -> devops ->
+
+webhook url - > https://hooks.slack.com/services/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
+token -> T010PA7H257/B010MT0MKNF/AJ279RN1rA6ZIpudGAUtcJbW
+
+
+pipeline syntax- slack send-> 
+channel-devops
+add new creds-secret text(token)
+overide url -https://hooks.slack.com/services
+color-green
+
+
+9)Nexus installation and integration(mithun technologies):
+=================================================
+install java 1.8*
+
+needs 2GB of RAM.
+
+free -h
+
+cd /opt
+wget http://download.sonatype.com/nexus/3/nexus-3.22.0-02-unix.tar.gz
+tar -xvzf *.gz
+
+drwxr-xr-x 9 root root 4096 Mar 28 19:53 nexus-3.22.0-02
+drwxr-xr-x 3 root root 4096 Mar 28 19:53 sonatype-work
+
+mv nexus-3.22.0-02 nexus
+useradd nexus
+visudo
+## Allow root to run any commands anywhere
+root    ALL=(ALL)       ALL
+nexus   ALL=(ALL)      NOPASSWD: AL
+
+
+chown -R nexus:nexus /opt/nexus
+chown -R nexus:nexus /opt/sonatype-work
+
+chmod -R 775 /opt/nexus
+chmod -R 775 /opt/sonatype-work
+
+vi /opt/nexus/bin/nexus.rc
+run_as_user='nexus' -> uncomment
+
+ln -s /opt/nexus/bin/nexus /etc/init.d/nexus
+
+su - nexus
+
+sudo systemctl enable nexus
+sudo systemctl start nexus -> did not worked
+
+chkconfig:
+--------------
+This example uses chkconfig, a tool that targets the initscripts in init.d to run the nexus service. Run these commands to activate the service:
+
+cd /etc/init.d
+sudo chkconfig --add nexus
+sudo chkconfig --levels 345 nexus on
+sudo service nexus start
+
+sudo service nexus status
+sudo service nexus start
+
+enable 8081 port in ec2- security groum - inbound- all tcp - source-anywhere
+http://15.206.91.143:8081
+
+username:Admin
+pwd:cat /opt/sonatype-work/nexus3/admin.password
+
+create a new repository:
+
+configuartion-> repository -> create repository->maven2(hosted)- veera-release
+
+integration:
+----------------
+
+install Nexus Artifact uploader plugin.
+
+pipeline syntax -> nexusartifactuploader ->
+
+Nexus URL -> private ip - 172.31.35.21
+add creds-global(jenkins)->username and pwd
+
+username-admin
+pwd-Veera@123
+id:nexus
+
+group id- in.javahome from pom.cml
+version - 1.0.0
+repo url:http://15.206.91.143:8081/repository/veera-release/
+artifact -> add
+artifactid -myweb
+type-war
+file-location -target/my-web-1.0.0.war (always under target, app name- version.type)
+
+**************************************************************************************************************************************************************
+
+
+Pipeline script:
+===========
+
+-install pipeline plugin.
+-checkout from scm - add git creds thru jenkins(veers019)
+
+secret text:March
+ID:git-creds
+
+-maven package - mvn clean package(def mvnHome, dfn mvnCMD)
+-build docker image veers019/veera:tagname . Docker shoule be installed in jenkins server and communication between docker and jenkins has been established. sudo chmod 666 /var/run/docker.sock   
+
+-push docker image. with creds-binding credentials(dockerhubpwd) - use only secret text
+-run container on dev server
+  install ssh agent plugin in jenkins. 
+ nstall docker on remote host(tomcat) , sudo chmod 666 /var/run/docker.sock   
+
+-email notification - configure system - SMTP server details- install extended email notification
+
+
+
+node {
+     stage('SCM checkout'){
+        git credentialsId: 'git-creds', url: 'https://github.com/veers019/my-app.git'
+        
+          }
+     stage('maven package'){
+        def mvnHome = tool name: 'maven', type: 'maven'
+        sh "${mvnHome}/bin/mvn test package"
+     }
+     
+     stage('code-coverage'){          
+          jacoco()
+      }
+
+     stage('SonarQube Analysis') {
+        def mvnHome =  tool name: 'maven', type: 'maven'
+        withSonarQubeEnv('Sonar-2') { 
+          sh "${mvnHome}/bin/mvn sonar:sonar"
+        }
+     }
+
+      stage("Quality Gate Static Check"){
+          timeout(time: 1, unit: 'HOURS') {
+              def qg = waitForQualityGate()
+              if (qg.status != 'OK') {
+                   slackSend baseUrl: 'https://hooks.slack.com/services/', 
+                   channel: '#devops', 
+                   color: 'danger', 
+                   message: 'SonarQube Analysis Failed', 
+                   tokenCredentialId: 'slack-creds'
+                   error "Pipeline aborted due to quality gate failure: ${qg.status}"
+              }
+          }
+      }    
+
+     stage('upload to nexus'){
+        nexusArtifactUploader artifacts: [
+            
+          [
+              artifactId: 'myweb', 
+              classifier: '', 
+              file: 'target/myweb-1.0.0.war', 
+              type: 'war'
+          ]
+        ], 
+        credentialsId: 'nexus-creds',
+        groupId: 'in.javahome', 
+        nexusUrl: '15.206.91.143:8081', 
+        nexusVersion: 'nexus', 
+        protocol: 'http', 
+        repository: 'veera-release', 
+        version: '1.0.0'
+     }
+
+     stage('Build docker image'){
+        sh 'docker build -t veers019/veera:my-app .'
+     }
+     stage('Push docker image') {
+        withCredentials([string(credentialsId: 'docker-pwd', variable: 'dockerHubPwd')]) {
+            sh "docker login -u veers019 -p ${dockerHubPwd}"  
+        }
+            sh 'docker push veers019/veera:my-app'
+
+     }
+     stage('Run container on dev server'){
+        def dockerRun = 'docker run -d --name my-app -p 8080:8080 veers019/veera:my-app'
+        sshagent(['tomcat-dev']) {
+            sh "ssh -o StrictHostKeyChecking=no ec2-user@3.7.45.251 ${dockerRun}"
+        }
+       
+     }
+
+     stage('Email Notification'){
+		mail bcc: '', body: """Hi Team, Your build successfully deployed
+		 Job URL : ${env.JOB_URL}
+		Job Name: ${env.JOB_NAME}
+
+
+                Thanks,
+                DevOps Team""", cc: '', from: 'veera.boss93@gmail.com', replyTo: '', subject: "${env.JOB_NAME} Success", to: 'veera.boss93@gmail.com'
+
+     }
+
+      stage('Slack Notification'){
+
+       slackSend baseUrl: 'https://hooks.slack.com/services/', 
+       channel: '#devops', 
+       color: 'good', 
+       message: 'Pipeline build got success', 
+       tokenCredentialId: 'slack-creds'
+       
+   }
+   
+}
+
+*********************************************************************************************************************************************************************
+
+Remove old Docker image and container:
+-----------------------------------------------------
+
+Ansible-playbook
+
+---
+- hosts: all
+  become: true
+
+  tasks:
+
+  - name: stop current running container
+    command: docker stop simple-devops-container
+    ignore_errors: yes
+
+  - name: Remove stopped container
+    command: docker rm simple-devops-container
+    ignore_errors: yes
+
+ - name: Remove docker image
+    command: docker rmi simple-devops-image
+    ignore_errors: yes
+
+  - name: Build docker image using war file
+    command: docker build -t simple-devops-image .
+    args: 
+      chdir: /opt/docker
+
+ - name: create container using  docker image
+    command: docker run -d --name simple-devops-container -p 8080:8080 simple-devops-image
+
+
+
+Getting approvals for deploy:
+--------------------------------------
+
+
+stage('Run container on dev server') {
+        def dockerRun = 'docker run -d --name my-app -p 8080:8080 veers019/veera:my-app'
+        sshagent(['tomcat-dev']) {
+            sh "ssh -o StrictHostKeyChecking=no ec2-user@3.7.45.251 ${dockerRun}"
+        }
+}
+
+
+stage('Dev approve') {
+    echo "Taking approval from DEV manager"
+    timeout(time:7,unit:'DAYS'){
+    input message:'Do you want to deploy?', submitter:'admin'
+    }
+
+}
+
+stage('Slack notification') {
+   slacksend(channel:'channel-name',message:"Job is successful,here is the info - Job'${env.JOB_NAME} [$(env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+}
+
+
+stage('Run container on QA server') {
+        def dockerRun = 'docker run -d --name my-app -p 8080:8080 veers019/veera:my-app'
+        sshagent(['tomcat-dev']) {
+            sh "ssh -o StrictHostKeyChecking=no ec2-user@4.7.45.157 ${dockerRun}"
+        }
+}
+
+stage('QA approve') {
+    echo "Taking approval from QA manager"
+    timeout(time:7,unit:'DAYS'){
+    input message:'Do you want to proceed to PROD?', submitter:'admin,manager_userid'
+    }
+
+}
+
+
+poll scm:
+========
+
+triggers {
+        cron('H */8 * * *') //regular builds
+        pollSCM('* * * * *') //polling for changes, here once a minute
+    }
+
+
+
+Mail to person that broke the build
+=============================
+
+post {
+        always { //Send an email to the person that broke the build
+            step([$class                  : 'Mailer',
+                  notifyEveryUnstableBuild: true,
+                  recipients              : [emailextrecipients([[$class: 'CulpritsRecipientProvider'], [$class: 'RequesterRecipientProvider']])].join(' ')])
+        }
+    }

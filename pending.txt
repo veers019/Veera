@@ -1,0 +1,444 @@
+1.Jboss docker file
+================
+
+docker pull jboss/wildfly
+docker run -it jboss/wildfly
+docker run -p 8180:8080 -p 9993:9990 -it jboss/wildfly /opt/jboss/wildfly/bin/standalone.sh -b 0.0.0.0 -bmanagemennt 0.0.0.0
+localhost:8180   -> wildfly homepage
+localhost:9993 -> admin console
+
+
+--> With the WildFly server you can deploy your application in multiple ways:
+
+You can use CLI
+You can use the web console
+You can use the management API directly
+You can use the deployment scanner
+
+The most popular way of deploying an application is using the deployment scanner. In WildFly this method is enabled by default and the only thing you need to do is to place your application inside of the deployments/ directory. It can be /opt/jboss/wildfly/standalone/deployments/ or /opt/jboss/wildfly/domain/deployments/ depending on which mode you choose (standalone is default in the jboss/wildfly image -- see above).The simplest and cleanest way to deploy an application to WildFly running in a container started from the jboss/wildfly image is to use the deployment scanner method mentioned above.To do this you just need to extend the jboss/wildfly image by creating a new one. Place your application inside the deployments/ directory with the ADD command (but make sure to include the trailing slash on the deployment folder path, more info). You can also do the changes to the configuration (if any) as additional steps (RUN command).
+
+FROM jboss/wildfly 
+ADD helloworld.war /opt/jboss/wildfly/standalone/deployments/
+docker build --tag=wildfly-helloworld .
+docker images 
+docker run -it wildfly-helloworld
+docker inspect -f '{{ .NetworkSettings.IPAddress }}' b63e7345bf81
+
+A:
+---
+
+ simple example was prepared to show how to do it, but the steps are following:
+
+1.Create Dockerfile with following content:
+
+FROM jboss/wildfly
+ADD your-awesome-app.war /opt/jboss/wildfly/standalone/deployments/
+
+2.Place your your-awesome-app.war file in the same directory as your Dockerfile.
+3.Run the build with (  docker build --tag=wildfly-app . )
+4.Run the container with ( docker run -it wildfly-app . ) Application will be deployed on the container boot.
+
+
+B:
+---
+
+# Use latest jboss/base-jdk:11 image as the base
+FROM jboss/base-jdk:11
+
+# Set the WILDFLY_VERSION env variable
+ENV WILDFLY_VERSION 19.0.0.Final
+ENV WILDFLY_SHA1 0d47c0e8054353f3e2749c11214eab5bc7d78a14
+ENV JBOSS_HOME /opt/jboss/wildfly
+
+USER root
+
+# Add the WildFly distribution to /opt, and make wildfly the owner of the extracted tar content
+# Make sure the distribution is available from a well-known place
+RUN cd $HOME \
+    && curl -O https://download.jboss.org/wildfly/$WILDFLY_VERSION/wildfly-$WILDFLY_VERSION.tar.gz \
+    && sha1sum wildfly-$WILDFLY_VERSION.tar.gz | grep $WILDFLY_SHA1 \
+    && tar xf wildfly-$WILDFLY_VERSION.tar.gz \
+    && mv $HOME/wildfly-$WILDFLY_VERSION $JBOSS_HOME \
+    && rm wildfly-$WILDFLY_VERSION.tar.gz \
+    && chown -R jboss:0 ${JBOSS_HOME} \
+    && chmod -R g+rw ${JBOSS_HOME}
+
+# Ensure signals are forwarded to the JVM process correctly for graceful shutdown
+ENV LAUNCH_JBOSS_IN_BACKGROUND true
+
+USER jboss
+
+# Expose the ports we're interested in
+EXPOSE 8080
+
+# Set the default command to run on boot
+# This will boot WildFly in the standalone mode and bind to all interface
+CMD ["/opt/jboss/wildfly/bin/standalone.sh", "-b", "0.0.0.0"]
+
+
+C:
+---
+
+1.
+$ vi Dockerfile
+# dockerfile to build image for JBoss EAP 7.1
+
+#start from eap71-openshift
+FROM registry.access.redhat.com/jboss-eap-7/eap71-openshift
+
+# file author / maintainer
+MAINTAINER "FirstName LastName" "emailaddress@gmail.com"
+
+# Copy war to deployments folder
+COPY app.war $JBOSS_HOME/standalone/deployments/
+
+# User root to modify war owners
+USER root
+
+# Modify owners war
+RUN chown jboss:jboss $JBOSS_HOME/standalone/deployments/app.war
+
+# Important, use jboss user to run image
+USER jboss
+
+2.$ docker build --tag=myuser/myimage:1.0 /path/to/dockerfile
+3.docker run -d -p 8080:8080 -p 9990:9990 myuser/myimage:1.0
+4.$ docker login -u myuser ip-or-domain-registry:port
+$ docker tag myuser/myimage:1.0 ip-or-domain-registry:port/myuser/myimage:1.0
+$ docker push ip-or-domain-registry:port/myuser/myimage:1.0
+
+
+D:
+---
+
+FROM jboss/wildfly 
+ADD helloworld.war /opt/jboss/wildfly/standalone/deployments/
+docker build --tag=wildfly-helloworld .
+docker run -it wildfly-helloworld
+docker inspect -f '{{ .NetworkSettings.IPAddress }}' b63e7345bf81
+
+FROM jboss/wildfly 
+RUN /opt/jboss/wildfly/bin/add-user.sh admin Admin#70365 --silent
+docker build --tag=wildfly-helloworld .
+docker run -it wildfly-helloworld /opt/jboss/wildfly/bin/standalone.sh -b 0.0.0.0 -bmanagement=0.0.0.0
+
+
+FROM jboss/wildfly 
+RUN /opt/jboss/wildfly/bin/add-user.sh admin Admin#70365 --silent 
+CMD ["/opt/jboss/wildfly/bin/standalone.sh", "-b", "0.0.0.0", "-bmanagement", "0.0.0.0"]
+
+http://www.mastertheboss.com/soa-cloud/docker/deploying-applications-on-your-docker-wildfly-image
+
+
+
+2.Gradle 
+========
+
+ a)integration with jenkins
+ -----------------------------------
+
+       i)install gradle jenkins
+       ii)Global tool config- > Gradle home
+
+
+https://github.com/gradle/gradle-site-plugin.git.
+https://guides.gradle.org/executing-gradle-builds-on-jenkins/
+
+$ git clone https://github.com/gradle/gradle-site-plugin.git
+Cloning into 'gradle-site-plugin'...
+$ cd gradle-site-plugin
+$ ./gradlew build
+$ ./gradlew build --scan
+
+
+ b)pipeline script for build
+------------------------------------
+
+stage('build')
+	{
+		steps{
+		withGradle {
+		sh './gradlew clean'
+		sh './gradlew assemble'
+		sh './gradlew build'
+		}
+		}
+
+	}
+
+
+stage('Build with Gradle') {
+      if(isUnix()) {
+        sh './gradlew clean build'
+      } else {
+        bat 'gradlew.bat clean build'
+      }
+   }
+
+
+3.junit 
+======
+
+./gradlew test
+
+dependencies {
+  testCompile group: 'org.hamcrest', name: 'hamcrest-core', version: '1.3'
+  testCompile group: 'junit', name: 'junit-dep', version: '4.10'
+  testCompile group: 'org.hamcrest', name: 'hamcrest-library', version: '1.3'
+  testCompile group: 'org.mockito', name: 'mockito-core', version: '1.9.+'
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.12'
+}
+
+test {
+    useJUnit()
+
+    maxHeapSize = '1G'
+}
+
+
+https://docs.gradle.org/current/userguide/java_testing.html
+
+
+stage('Unit & Integration Tests') {
+            steps {
+                script {
+                    try {
+                        sh './gradlew clean test --no-daemon' //run a gradle task                 or     (dir(‘sub-dir’) {sh ‘./gradlew clean build’}) -> sub-directory
+                    } finally {
+                        junit '**/build/test-results/test/*.xml' //make the junit test results available in any case (success & failure)
+                    }
+                }
+            }
+        }
+        stage('Frontend Unit Tests') {
+            steps {
+                sshagent(['git']) {
+                    script {
+                        try {
+                            sh './gradlew cleanFrontendTest --no-daemon'
+                            sh './gradlew frontendUnitTest --no-daemon'
+                        } finally {
+                            junit 'publicapi/frontend/test/karma-result.xml'
+                        }
+                    }
+                }
+            }
+        }
+
+https://gist.github.com/veers019/a6c00fd2c4de3f71b57f642251f32b50
+
+
+
+java:
+  stage: test
+  script:
+  - gradle test
+  artifacts:
+    reports:
+      junit: build/test-results/test/**/TEST-*.xml
+
+4.jacoco
+=========
+
+sh "./gradlew jacocoTestReport" publishHTML(target: [reportDir:'build/jacocoHtml', reportFiles: 'index.html', reportName: 'Code Coverage'])
+
+
+stage('Build') {
+     steps {
+        sh './jenkins_build.sh'
+        junit '*/build/test-results/*.xml'
+        step( [ $class: 'JacocoPublisher' ] )
+     }
+}
+
+
+
+step([$class: 'JacocoPublisher', 
+      execPattern: 'target/*.exec',
+      classPattern: 'target/classes',
+      sourcePattern: 'src/main/java',
+      exclusionPattern: 'src/test*'
+])
+
+
+post {
+always {
+publishCoverage adapters: [jacocoAdapter('/target/site/jacoco/jacoco.xml')]
+} }"
+
+
+
+
+
+https://techrocking.com/jacoco-coverage-in-jenkins-pipeline/
+
+stage('Build & Generate Test Report') {
+          steps {
+              script {
+                 try {
+                        sh 'chmod +x gradlew'
+                        sh './gradlew build -x test --no-daemon'
+                        sh './gradlew test jacocoTestReport --no-daemon'
+                    } finally {
+                        junit '**/build/test-results/test/*.xml' //make 
+                        the junit test results available in any case 
+                        (success & failure)
+                    }
+                }
+            }
+        }
+        
+ stage('Publish Test Coverage Report') {
+         steps {
+           step([$class: 'JacocoPublisher', 
+                execPattern: '**/build/jacoco/*.exec',
+                classPattern: '**/build/classes',
+                sourcePattern: 'src/main/java',
+                exclusionPattern: 'src/test*'
+                ])
+            }
+        }
+		
+    }
+
+
+
+
+testsPublishResults(
+  junit: [updateResults: true, archive: true],
+  jacoco: [archive: true]
+)
+
+
+
+name	mandatory	default
+jacoco	no	[pattern:**/target/*.exec, allowEmptyResults:true, archive:false, active:false]
+junit	no	[pattern:**/TEST-*.xml, updateResults:false, allowEmptyResults:true, archive:false, active:false]
+
+
+
+
+
+5.sonarqube
+============
+  fail - break- slack notifiy
+  pass- notify
+
+
+stage('SonarQube analysis') {
+    withSonarQubeEnv() { // Will pick the global server connection you have configured
+      sh './gradlew sonarqube'
+    }
+  }
+
+
+
+stage("Quality Gate Static Check"){
+          timeout(time: 1, unit: 'HOURS') {
+              def qg = waitForQualityGate()
+              if (qg.status != 'OK') {
+                   slackSend baseUrl: 'https://hooks.slack.com/services/', 
+                   channel: '#devops', 
+                   color: 'danger', 
+                   message: 'SonarQube Analysis Failed', 
+                   tokenCredentialId: 'slack-creds'
+                   error "Pipeline aborted due to quality gate failure: ${qg.status}"
+              }
+          }
+      }    
+
+
+
+stage('Sonarqube') {
+    environment {
+        scannerHome = tool 'SonarQubeScanner'
+    }
+    steps {
+        withSonarQubeEnv('sonarqube') {
+            sh "${scannerHome}/bin/sonar-scanner"
+        }
+        timeout(time: 10, unit: 'MINUTES') {
+            waitForQualityGate abortPipeline: true
+        }
+    }
+}
+
+
+Email Notification:
+------------------------
+
+Sonarqube->administaration->configuartion-> mail
+
+type of secure -> ssl (406)or startls(587)
+
+
+administartion->security->users->create user-> to add user in sonarqube
+
+user->my account->notification
+
+
+6.upload to nexus
+=================
+
+  stage('Publish Artifact to Nexus') {
+            steps {
+                sh './gradlew publish --no-daemon'
+            }
+        }
+
+
+stage('upload to nexus'){
+        nexusArtifactUploader artifacts: [
+            
+          [
+              artifactId: 'myweb', 
+              classifier: '', 
+              file: 'target/myweb-1.0.0.war', 
+              type: 'war'
+          ]
+        ], 
+        credentialsId: 'nexus-creds',
+        groupId: 'in.javahome', 
+        nexusUrl: '15.206.91.143:8081', 
+        nexusVersion: 'nexus', 
+        protocol: 'http', 
+        repository: 'veera-release', 
+        version: '1.0.0'
+     }
+
+7.docker build, docker push
+
+8.cloudformation
+
+9.ECS
+=====
+1)creating an IAM account
+
+add new user -> add to the group(administartor)->policy - AdministratorAccess
+
+now user can login with his own username and pwd.
+
+2)create  new repository in ECR
+695184565534.dkr.ecr.ap-south-1.amazonaws.com/deploy
+
+
+
+10.EKS
+
+11.Chef
+
+
+A)Google - 1,2
+B)YouTube - 1,2
+C)Udemy portal-1
+D)Github - 1,2
+E)Lab
+
+to delete-
+
+1.new user
+2.new groups 2
+3.policy - all under IAM
